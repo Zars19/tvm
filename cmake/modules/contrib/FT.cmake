@@ -14,16 +14,16 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=wildcard-import
-"""Contrib modules."""
-from .register import get_pattern_table, register_pattern_table
 
-from .arm_compute_lib import *
-from .dnnl import *
-from .bnns import *
-from .coreml import *
-from .ethosn import *
-from .libtorch import *
-from .tensorrt import *
-from .cutlass import *
-from .ft import *
+if(USE_CODEGENFT)
+  tvm_file_glob(GLOB FT_RELAY_CONTRIB_SRC src/relay/backend/contrib/ft/codegen.cc)
+  list(APPEND COMPILER_SRCS ${FT_RELAY_CONTRIB_SRC})
+
+  find_library(EXTERN_LIBRARY_PTHREAD pthread)
+  list(APPEND TVM_RUNTIME_LINKER_LIBS ${EXTERN_LIBRARY_PTHREAD})
+  tvm_file_glob(GLOB FT_CONTRIB_SRC src/runtime/contrib/ft/ft.cc)
+  list(APPEND RUNTIME_SRCS ${FT_CONTRIB_SRC})
+  message(STATUS "Build with FT C source module: " ${EXTERN_LIBRARY_FT})
+endif(USE_CODEGENFT)
+
+
