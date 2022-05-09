@@ -40,6 +40,8 @@ def _register_external_op_helper(op_name, supported=True):
 _register_external_op_helper("subtract")
 _register_external_op_helper("add")
 _register_external_op_helper("multiply")
+_register_external_op_helper("abs")
+_register_external_op_helper("nn.relu")
 
 
 @register_pattern_table("ft")

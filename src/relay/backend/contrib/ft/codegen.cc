@@ -114,14 +114,14 @@ class CodegenFT : public MemoizedExprTranslator<std::vector<Output>>, public Cod
     const auto& dtype = GetDtypeString(type_node);
 
     // Make function declaration
-    decl_stream << "ft_binary_op_" ;
-
     if (IsOp(call, "add")) {
-      decl_stream << "add";
+      decl_stream << "ft_binary_op_add";
     } else if (IsOp(call, "subtract")) {
-      decl_stream << "subtract";
+      decl_stream << "ft_binary_op_subtract";
     } else if (IsOp(call, "multiply")) {
-      decl_stream << "multiply";
+      decl_stream << "ft_binary_op_multiply";
+    } else if (IsOp(call, "abs")) {
+      decl_stream << "ft_unary_op_abs";
     } else {
       LOG(FATAL) << "Unrecognized op";
     }
@@ -151,10 +151,11 @@ class CodegenFT : public MemoizedExprTranslator<std::vector<Output>>, public Cod
 
     decl_stream << ", " << out ;
     auto in_shape = GetShape(call->args[0]->checked_type());
+    int in_size = 1;
     for (size_t i = 0; i < in_shape.size(); ++i) {
-      decl_stream << ", " << in_shape[i];
+      in_size *= in_shape[i];
     }
-    decl_stream << ");";
+    decl_stream << ", " << in_size << ");";
     ext_func_body_.push_back(decl_stream.str());
 
     // Update output buffer
@@ -241,28 +242,6 @@ class FTModuleCodegen : public CSourceModuleCodegenBase {
       code_stream_ << "#include <tvm/runtime/packed_func.h>\n";
       code_stream_ << "#endif\n";
     }
-
-    // Append some common macro for operator definition.
-    const char* operator_macro = R"op_macro(
-    #define CSOURCE_BINARY_OP_1D(p_ID_, p_OP_, p_DIM1_, p_DTYPE)       \
-      void p_ID_(p_DTYPE* a, p_DTYPE* b, p_DTYPE* out) {    \
-        for (int64_t i = 0; i < p_DIM1_; ++i) {                        \
-          out[i] = a[i] p_OP_ b[i];                                    \
-        }                                                              \
-      }
-
-    #define CSOURCE_BINARY_OP_2D(p_ID_, p_OP_, p_DIM1_, p_DIM2_, p_DTYPE)  \
-      void p_ID_(p_DTYPE* a, p_DTYPE* b, p_DTYPE* out) {        \
-        for (int64_t i = 0; i < p_DIM1_; ++i) {                            \
-          for (int64_t j = 0; j < p_DIM2_; ++j) {                          \
-            int64_t k = i * p_DIM2_ + j;                                   \
-            out[k] = a[k] p_OP_ b[k];                                      \
-          }                                                                \
-        }                                                                  \
-      }
-    )op_macro";
-
-    code_stream_ << operator_macro << "\n\n";
     code_stream_ << std::get<2>(res);
     std::string code = code_stream_.str();
     FILE *fp = NULL;

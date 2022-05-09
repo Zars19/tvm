@@ -8,11 +8,13 @@ namespace tvm {
 namespace runtime {
 namespace contrib {
 
-extern "C" void ft_binary_op_add(float* a, float* b, float* out, int64_t p_DIM1_, int64_t p_DIM2_);
+extern "C" void ft_binary_op_add(float* a, float* b, float* out, int64_t p_SIZ_);
 
-extern "C" void ft_binary_op_multiply(float* a, float* b, float* out, int64_t p_DIM1_, int64_t p_DIM2_);
+extern "C" void ft_binary_op_multiply(float* a, float* b, float* out, int64_t p_SIZ_);
 
-extern "C" void ft_binary_op_subtract(float* a, float* b, float* out, int64_t p_DIM1_, int64_t p_DIM2_);
+extern "C" void ft_binary_op_subtract(float* a, float* b, float* out, int64_t p_SIZ_);
+
+extern "C" void ft_unary_op_abs(float* a, float* out, int64_t p_SIZ_);
 
 
 }  // namespace contrib
