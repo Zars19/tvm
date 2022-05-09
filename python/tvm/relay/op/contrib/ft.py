@@ -36,12 +36,14 @@ def _register_external_op_helper(op_name, supported=True):
 
     return _func_wrapper
 
-
-_register_external_op_helper("subtract")
 _register_external_op_helper("add")
+_register_external_op_helper("subtract")
 _register_external_op_helper("multiply")
 _register_external_op_helper("abs")
+_register_external_op_helper("sigmod")
 _register_external_op_helper("nn.relu")
+_register_external_op_helper("tanh")
+_register_external_op_helper("nn.conv2d")
 
 
 @register_pattern_table("ft")

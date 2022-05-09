@@ -114,59 +114,123 @@ class CodegenFT : public MemoizedExprTranslator<std::vector<Output>>, public Cod
     const auto& dtype = GetDtypeString(type_node);
 
     // Make function declaration
-    if (IsOp(call, "add")) {
-      decl_stream << "ft_binary_op_add";
-    } else if (IsOp(call, "subtract")) {
-      decl_stream << "ft_binary_op_subtract";
-    } else if (IsOp(call, "multiply")) {
-      decl_stream << "ft_binary_op_multiply";
-    } else if (IsOp(call, "abs")) {
-      decl_stream << "ft_unary_op_abs";
-    } else {
-      LOG(FATAL) << "Unrecognized op";
-    }
+    
+    if (IsOp(call, "nn.conv2d")) {
+      decl_stream << "ft_conv2d(";
 
-    // Make function call when visiting arguments
-    bool first = true;
-    decl_stream <<  "(";
-    for (size_t i = 0; i < call->args.size(); ++i) {
-      auto res = VisitExpr(call->args[i]);
-      for (auto out : res) {
+      // Make function call when visiting arguments
+      bool first = true;
+      for (size_t i = 0; i < call->args.size(); ++i) {
+        auto res = VisitExpr(call->args[i]);
+        for (auto out : res) {
+          if (!first) {
+            decl_stream << ", ";
+          }
+          first = false;
+          decl_stream << out.name;
+        }
+      }
+
+      std::string out = "buf_" + std::to_string(buf_idx_++);
+      auto out_shape = GetShape(call->checked_type());
+      int out_size = 1;
+      for (size_t i = 0; i < out_shape.size(); ++i) {
+        out_size *= out_shape[i];
+      }
+      buf_stream << dtype << "* " << out << " = (" << dtype << "*)malloc(4 * " << out_size << ");";
+      buf_decl_.push_back(buf_stream.str());
+
+      decl_stream << ", " << out << ", std::vector<int>({";
+      auto data_shape = GetShape(call->args[0]->checked_type());
+      for (size_t i = 0, first = true; i < data_shape.size(); ++i) {
         if (!first) {
           decl_stream << ", ";
         }
         first = false;
-        decl_stream << out.name;
+        decl_stream << data_shape[i];
       }
-    }
+      decl_stream << "}), std::vector<int>({";
+      auto weight_shape = GetShape(call->args[1]->checked_type());
+      for (size_t i = 0, first = true; i < weight_shape.size(); ++i) {
+        if (!first) {
+          decl_stream << ", ";
+        }
+        first = false;
+        decl_stream << weight_shape[i];
+      }
+      decl_stream << "}));";
+      ext_func_body_.push_back(decl_stream.str());
 
-    std::string out = "buf_" + std::to_string(buf_idx_++);
-    auto out_shape = GetShape(call->checked_type());
-    int out_size = 1;
-    for (size_t i = 0; i < out_shape.size(); ++i) {
-      out_size *= out_shape[i];
-    }
-    buf_stream << dtype << "* " << out << " = (" << dtype << "*)malloc(4 * " << out_size << ");";
-    buf_decl_.push_back(buf_stream.str());
+      // Update output buffer
+      // Note C codegen only handles TensorType. Therefore, we don't flatten
+      // tuples and only return a single vaule.
+      Output output;
+      output.name = out;
+      output.dtype = dtype;
+      output.need_copy = true;
+      output.size = out_size;
+      return {output};
+    } else {
+      const auto* op_node = call->op.as<OpNode>();
+      ICHECK(op_node) << "Expect OpNode, but got " << call->op->GetTypeKey();
 
-    decl_stream << ", " << out ;
-    auto in_shape = GetShape(call->args[0]->checked_type());
-    int in_size = 1;
-    for (size_t i = 0; i < in_shape.size(); ++i) {
-      in_size *= in_shape[i];
-    }
-    decl_stream << ", " << in_size << ");";
-    ext_func_body_.push_back(decl_stream.str());
+      static const std::map<std::string, std::string> op_map = {
+          {"add", "ft_binary_op_add"},           {"subtract", "ft_binary_op_subtract"},
+          {"multiply", "ft_binary_op_multiply"}, {"abs", "ft_unary_op_abs"},
+          {"nn.relu", "ft_unary_op_relu"},       {"sigmod", "ft_unary_op_sigmod"},
+          {"tanh", "ft_unary_op_tanh"},
+      };
 
-    // Update output buffer
-    // Note C codegen only handles TensorType. Therefore, we don't flatten
-    // tuples and only return a single vaule.
-    Output output;
-    output.name = out;
-    output.dtype = dtype;
-    output.need_copy = true;
-    output.size = out_size;
-    return {output};
+      const auto op_name = GetRef<Op>(op_node)->name;
+      const auto iter = op_map.find(op_name);
+      if (iter == op_map.end()) {
+        LOG(FATAL) << "Unsupported op: " << AsText(call->op, false);
+        return {};
+      }
+
+      decl_stream << iter->second << "(";
+
+      // Make function call when visiting arguments
+      bool first = true;
+      for (size_t i = 0; i < call->args.size(); ++i) {
+        auto res = VisitExpr(call->args[i]);
+        for (auto out : res) {
+          if (!first) {
+            decl_stream << ", ";
+          }
+          first = false;
+          decl_stream << out.name;
+        }
+      }
+
+      std::string out = "buf_" + std::to_string(buf_idx_++);
+      auto out_shape = GetShape(call->checked_type());
+      int out_size = 1;
+      for (size_t i = 0; i < out_shape.size(); ++i) {
+        out_size *= out_shape[i];
+      }
+      buf_stream << dtype << "* " << out << " = (" << dtype << "*)malloc(4 * " << out_size << ");";
+      buf_decl_.push_back(buf_stream.str());
+
+      decl_stream << ", " << out ;
+      auto in_shape = GetShape(call->args[0]->checked_type());
+      int in_size = 1;
+      for (size_t i = 0; i < in_shape.size(); ++i) {
+        in_size *= in_shape[i];
+      }
+      decl_stream << ", " << in_size << ");";
+      ext_func_body_.push_back(decl_stream.str());
+
+      // Update output buffer
+      // Note C codegen only handles TensorType. Therefore, we don't flatten
+      // tuples and only return a single vaule.
+      Output output;
+      output.name = out;
+      output.dtype = dtype;
+      output.need_copy = true;
+      output.size = out_size;
+      return {output};
+    }
   }
 
   /*!
